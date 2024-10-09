@@ -1,20 +1,21 @@
 module Resource.Traits.Logic;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Utils open;
 
 trait
 type HasLogic ResourceT :=
   mkHasLogic {
-    get : ResourceT -> Resource -> Transaction -> Bool;
-    set : (Resource -> Transaction -> Bool) -> ResourceT -> ResourceT
+    get : ResourceT -> Logic;
+    set : Logic -> ResourceT -> ResourceT
   };
 
 instance
 Resource-HasLogic : HasLogic Resource :=
   mkHasLogic@{
-    get (resource : Resource) : Resource -> Transaction -> Bool := Resource.logic resource;
+    get (resource : Resource) : Logic := resource |> Resource.logicRef |> Ref.fromRef;
 
-    set (logic : Resource -> Transaction -> Bool) (resource : Resource) : Resource :=
-      resource@Resource{logic := logic}
+    set (logic : Logic) (resource : Resource) : Resource :=
+      resource@Resource{logicRef := Ref.toRef logic}
   };

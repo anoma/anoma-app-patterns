@@ -1,8 +1,9 @@
 module Resource.Traits;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import Anoma.Rep open;
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Identity.External open;
 import AnomaHelpers open;
 
 import Resource.Traits.Convertable open public;
@@ -19,26 +20,21 @@ import Resource.Traits.Transferability open public;
 module FromConvertable;
   hasLogic {R} {{Convertable R}} : HasLogic R :=
     mkHasLogic@{
-      get (typed : R) : Resource -> Transaction -> Bool :=
-        HasLogic.get (Convertable.toResource typed);
-
-      set (logic : Resource -> Transaction -> Bool) (typed : R) : R :=
+      get (typed : R) : Logic := HasLogic.get (Convertable.toResource typed);
+      set (logic : Logic) (typed : R) : R :=
         HasLogic.set logic (Convertable.toResource typed) |> Convertable.fromResource
     };
 
   hasKind {R} {{Convertable R}} : HasKind R :=
     mkHasKind@{
-      get (typed : R) : Kind := HasKind.get (Convertable.toResource typed);
-
-      set (kind : Kind) (typed : R) : R :=
-        HasKind.set kind (Convertable.toResource typed) |> Convertable.fromResource
+      get (typed : R) : Kind := HasKind.get (Convertable.toResource typed)
     };
 
   hasQuantity {R} {{Convertable R}} : HasQuantity R :=
     mkHasQuantity@{
-      get (typed : R) : Nat := HasQuantity.get (Convertable.toResource typed);
+      get (typed : R) : Quantity := HasQuantity.get (Convertable.toResource typed);
 
-      set (quantity : Nat) (typed : R) : R :=
+      set (quantity : Quantity) (typed : R) : R :=
         HasQuantity.set quantity (Convertable.toResource typed) |> Convertable.fromResource
     };
 
@@ -50,12 +46,12 @@ module FromConvertable;
         HasEphemerality.set ephemerality (Convertable.toResource typed) |> Convertable.fromResource
     };
 
+  --- TODO Refactor. Ownership should be uncoupled from the nullifier key commitment.
   hasOwner {R} {{Convertable R}} : HasOwner R :=
     mkHasOwner@{
-      get (typed : R) : PublicKey := HasOwner.get (Convertable.toResource typed);
+      get (typed : R) : ExternalIdentity := HasOwner.get (Convertable.toResource typed);
 
-      set (owner : PublicKey) (typed : R) : R :=
+      set (owner : ExternalIdentity) (typed : R) : R :=
         HasOwner.set owner (Convertable.toResource typed) |> Convertable.fromResource
     };
-
 end;

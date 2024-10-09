@@ -1,7 +1,9 @@
 module Transaction.Merge;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Identity open;
+import Anoma.Transaction open;
 
 import Resource.Error open;
 import Resource.Traits open;
@@ -11,7 +13,7 @@ import Transaction.Traits open;
 --- The function returns a ;StandardError; if the ;Convertable; ;Resource;s
 --- - have different ;Kind;
 --- - are ;Transferability.NonTransferable;
---- - are not owned by calling ;KeyPair;.
+--- - are not owned by calling ;Identity;.
 merge
   {R}
   {{Convertable R}}
@@ -20,9 +22,9 @@ merge
   {{HasQuantity R}}
   {{HasKind R}}
   {{TransactionConvertable R R}}
-  (self : KeyPair)
+  (self : Identity)
   (toMerge : List R)
-  (receiver : PublicKey)
+  (receiver : ExternalIdentity)
   : Result StandardError Transaction :=
   case toMerge of
     | nil :=
@@ -33,19 +35,18 @@ merge
         }
     | t :: _ :=
       let
-        myself : PublicKey := KeyPair.pubKey self;
-        nk : PrivateKey := KeyPair.privKey self;
-        kind : Kind := HasKind.get t;
-        totalHasQuantity : Nat := listFor (acc := 0) (ti in toMerge) {HasQuantity.get ti + acc};
-        merged := HasOwner.set receiver (HasQuantity.set totalHasQuantity t);
+        myself : ExternalIdentity := Identity.external self;
+        expectedKind : Kind := HasKind.get t;
+        totalQuantity : Quantity := listFor (acc := 0) (ti in toMerge) {HasQuantity.get ti + acc};
+        merged := HasOwner.set receiver (HasQuantity.set totalQuantity t);
       in case HasTransferability.get t of
            | NonTransferable := throw mkNonTransferableError
            | Transferable :=
-             case find ((/=) kind) (map HasKind.get toMerge) of
+             case find ((/=) expectedKind) (map HasKind.get toMerge) of
                | just otherKind :=
                  throw
                    mkInvalidKindError@{
-                     expected := kind;
+                     expected := expectedKind;
                      actual := otherKind
                    }
                | nothing :=
@@ -56,4 +57,4 @@ merge
                          expected := myself;
                          actual := notMyself
                        }
-                   | nothing := ok (TransactionConvertable.toTransaction nk toMerge [merged]);
+                   | nothing := ok (TransactionConvertable.toTransaction self toMerge [merged]);

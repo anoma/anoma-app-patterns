@@ -1,6 +1,8 @@
 module Utils.Dummy.Logic;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Proving.Types open;
 
-alwaysTrueLogic (self : Resource) (tx : Transaction) : Bool := true;
+alwaysTrueLogic
+  (publicInputs : ResourceLogic.Instance) (privateInputs : ResourceLogic.Witness) : Bool := true;

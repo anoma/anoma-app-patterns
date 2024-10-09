@@ -1,8 +1,11 @@
 module Utils.Counter.Projection;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Utils open;
+import Anoma.Builtin.System open;
 
+import AnomaHelpers open;
 import Utils.Counter.Label open;
 
 --- A unique identifier (UID) characterized by a ;Nat; counter value
@@ -16,6 +19,6 @@ type UID :=
 --- Returns the current UID of a counter ;Resource;.
 getUID (counter : Resource) : UID :=
   mkUID@{
-    id := Resource.data counter;
-    uniqueKind := anomaKind counter
+    id := counter |> Resource.valueRef |> Ref.fromRef |> Value.unValue |> anomaDecode;
+    uniqueKind := kind counter
   };

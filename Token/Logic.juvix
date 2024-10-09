@@ -1,46 +1,149 @@
 module Token.Logic;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Stdlib.Debug.Fail open using {failwith};
+import Anoma.Resource open;
+import Anoma.Identity open;
+import Anoma.Proving.Types open;
+
 import AnomaHelpers open;
 
 import Resource.Traits open;
 import Authorization.Check open;
+import Authorization.Identities open;
 import Token.Label open;
 
-tokenLogic (supply : Supply) (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
+tokenLogic
+  (supply : Supply)
+  (originator : ExternalIdentity)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool :=
   case supply of
-    | Unbound := unboundSupplyLogic originator self tx
-    | Capped := cappedSupplyLogic originator self tx
-    | Fixed nf := fixedSupplyLogic nf originator self tx;
+    | Unbound := unboundSupplyLogic originator publicInputs privateInputs
+    | Capped := cappedSupplyLogic originator publicInputs privateInputs
+    | Fixed nf := fixedSupplyLogic nf originator publicInputs privateInputs;
 
-unboundSupplyLogic (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
-  case lifecycle self tx, HasEphemerality.get self of
-    | Consumed, Ephemeral := unboundSupplyInitializationLogic originator self tx
-    | Consumed, NonEphemeral := transferLogic self tx
-    | Created, Ephemeral := true
-    | Created, NonEphemeral := true
-    | Unknown, _ := false;
+--TODO CONTINUE HERE
+unboundSupplyLogic
+  (originator : ExternalIdentity)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool :=
+  let
+    tag := ResourceLogic.Instance.tag publicInputs;
+  in case tag of
+       | ResourceLogic.Consumed nullifier :=
+         let
+           -- TODO HOW TO FIX THIS?
+           nullifierKey :=
+             Universal.internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findConsumedResource@{
+               nullifier;
+               nullifierKey;
+               resources
+             };
+         in case maybeSelf of {
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of {
+                  | Ephemeral := unboundSupplyInitializationLogic originator self publicInputs
+                  | NonEphemeral := transferLogic self publicInputs
+                }
+            }
+       | ResourceLogic.Created commitment := true;
 
 unboundSupplyInitializationLogic
-  (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
-  isAuthorizedBy originator self tx;
+  (originator : ExternalIdentity)
+  (self : Resource)
+  (publicInputs : ResourceLogic.Instance)
+  : Bool :=
+  isAuthorizedBy@{
+    signer := originator;
+    resource := self;
+    publicInputs
+  };
 
 fixedSupplyLogic
-  (nf : Nullifier) (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
-  case lifecycle self tx, HasEphemerality.get self of
-    | Consumed, Ephemeral := fixedSupplyInitializationLogic nf originator self tx
-    | Consumed, NonEphemeral := transferLogic self tx
-    | Created, Ephemeral := false
-    | Created, NonEphemeral := true
-    | Unknown, _ := false;
+  (nf : Nullifier)
+  (originator : ExternalIdentity)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool :=
+  let
+    tag := ResourceLogic.Instance.tag publicInputs;
+  in case tag of
+       | ResourceLogic.Consumed nullifier :=
+         let
+           -- TODO HOW TO FIX THIS?
+           nullifierKey :=
+             Universal.internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findConsumedResource@{
+               nullifier;
+               nullifierKey;
+               resources
+             };
+         in case maybeSelf of {
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of {
+                  | Ephemeral :=
+                    fixedSupplyInitializationLogic originator nullifier self publicInputs
+                  | NonEphemeral := transferLogic self publicInputs
+                }
+            }
+       | ResourceLogic.Created commitment :=
+         let
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findCreatedResource@{
+               commitment;
+               resources
+             };
+         in case maybeSelf of
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of
+                  | Ephemeral := false
+                  | NonEphemeral := true;
 
 fixedSupplyInitializationLogic
-  (nf : Nullifier) (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
-  isNullifierPresent nf tx && isAuthorizedBy originator self tx;
+  (originator : ExternalIdentity)
+  (nullifier : Nullifier)
+  (self : Resource)
+  (publicInputs : ResourceLogic.Instance)
+  : Bool :=
+  isNullifierPresent@{
+      nullifier;
+      nullifierSet := ResourceLogic.Instance.nullifiers publicInputs
+    }
+    && isAuthorizedBy@{
+      signer := originator;
+      resource := self;
+      publicInputs
+    };
 
-cappedSupplyLogic (originator : PublicKey) (self : Resource) (tx : Transaction) : Bool := false;
+cappedSupplyLogic
+  (originator : ExternalIdentity)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool := failwith "NOT IMPLEMENTED";
 
--- TODO generalize
-transferLogic (self : Resource) (tx : Transaction) : Bool :=
-  isTransferable self && isAuthorizedBy (Resource.npk self) self tx;
+transferLogic (self : Resource) (publicInputs : ResourceLogic.Instance) : Bool :=
+  let
+    signer :=
+      -- TODO add conversion helper
+        self
+        |> Resource.nullifierKeyCommitment
+        |> NullifierKeyCommitment.unNullifierKeyCommitment
+        |> mkExternalIdentity;
+  in isTransferable self
+    && isAuthorizedBy@{
+      signer;
+      resource := self;
+      publicInputs
+    };

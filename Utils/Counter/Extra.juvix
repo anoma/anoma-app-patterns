@@ -1,22 +1,32 @@
 module Utils.Counter.Extra;
 
 import Stdlib.Prelude open;
+import Stdlib.Debug.Fail open using {failwith};
 import Data.Set as Set open using {Set};
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Proving.Types open;
+
 import AnomaHelpers open;
 
 import Authorization.Message open;
 import Utils.Counter.Count open;
 
 -- TODO use nullifier instead of commitment
-findCreatedCounter (consumedCounter : Resource) (tx : Transaction) : Maybe Resource :=
+-- TODO Refactor by using actions.
+findCreatedCounter
+  (consumedCounter : Resource)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Maybe Resource :=
   let
-    cm : Commitment := commitment consumedCounter;
+    cm := commitment consumedCounter;
   in case
-       lookupExtraData@{
+       lookupAppData@{
+         -- TODO use a different lookup key
          key := cm;
          Value := ResourceRelationship;
-         tx
+         appData := ResourceLogic.Instance.appData publicInputs
        }
      of
        | nothing := nothing
@@ -27,10 +37,19 @@ findCreatedCounter (consumedCounter : Resource) (tx : Transaction) : Maybe Resou
          of
            | nil, [foundCm] :=
              let
-               foundCounter : Resource := commitmentResource foundCm;
-             in if
-               | ResourceRelationship.origin msg == cm
-                 && anomaKind consumedCounter == anomaKind foundCounter
-                 && isCreated foundCounter tx := just foundCounter
-               | else := nothing
+               created := ResourceLogic.Witness.created privateInputs;
+               maybeCounter : Maybe Resource :=
+                 findCreatedResource@{
+                   commitment := foundCm;
+                   resources := created
+                 };
+             in case maybeCounter of {
+                  | nothing := nothing
+                  | just foundCounter :=
+                    if
+                      | ResourceRelationship.origin msg == cm
+                        && kind consumedCounter == kind foundCounter
+                        && isCreated foundCm publicInputs := just foundCounter
+                      | else := nothing
+                }
            | _, _ := nothing;

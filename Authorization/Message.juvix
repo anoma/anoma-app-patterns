@@ -3,8 +3,14 @@ module Authorization.Message;
 import Stdlib.Prelude open;
 import Data.Map as Map open using {Map; empty};
 import Data.Set as Set open using {Set; empty};
-import Anoma open;
 import AnomaHelpers open;
+-- TODO fix imports
+import Anoma.Resource as Resource open;
+import Anoma.Transaction as Transaction open;
+import Anoma.Builtin.System open;
+import Anoma.Builtin.ByteArray open;
+import Anoma.Transaction.AppData open;
+import Anoma.Identity open;
 
 -- TODO use Nullifier once we comply with v2 specs
 type ResourceRelationship :=
@@ -14,34 +20,73 @@ type ResourceRelationship :=
     mustBeConsumed : Set Nullifier
   };
 
--- TODO make signing optional
 mkResourceRelationshipExtraDataMapEntry
-  (nullifierKey : PrivateKey)
+  (nullifierKey : Resource.NullifierKey)
   (mustBeConsumed : List Resource)
   (mustBeCreated : List Resource)
   (origin : Resource)
-  : Pair Bytes32 Bytes :=
+  : AppDataEntry :=
   let
-    originCm : Commitment := commitment origin;
-    consumedNfs : Set Nullifier :=
+    originCm : Resource.Commitment := commitment origin;
+    consumedNfs : Set Resource.Nullifier :=
       Set.fromList (map \ {r := nullifier r nullifierKey} mustBeConsumed);
-    createdCms : Set Commitment := Set.fromList (map commitment mustBeCreated);
+    createdCms : Set Resource.Commitment := Set.fromList (map commitment mustBeCreated);
     msg : ResourceRelationship :=
       mkResourceRelationship@{
         origin := originCm;
         mustBeConsumed := consumedNfs;
         mustBeCreated := createdCms
       };
-    sig := anomaSignDetached msg nullifierKey;
-  in (originCm, msg, sig) |> mkExtraDataEntry;
+    sig : ByteArray := anomaSignDetached msg (NullifierKey.unNullifierKey nullifierKey);
+  in mkAppDataEntry@{
+    key := anomaEncode originCm |> mkAppDataKey;
+    value := anomaEncode (msg, sig) |> mkAppDataValue
+  };
 
+--- TODO revisit
 mkResourceRelationshipExtraData
-  (nullifierKey : PrivateKey)
+  (nullifierKey : Resource.NullifierKey)
   (origins : List Resource)
   (mustBeConsumed : List Resource)
   (mustBeCreated : List Resource)
-  : Map Bytes32 Bytes :=
-  Map.fromList
+  : AppData :=
+  Set.fromList
     (map
       (mkResourceRelationshipExtraDataMapEntry nullifierKey mustBeConsumed mustBeCreated)
       origins);
+
+module FromConvertable;
+  import Resource.Traits.Convertable open;
+  import Transaction.Traits open;
+
+  --- Creates an extra data map entry for every consumed ;Convertable; ;Resource; of type `R1` with a ;ResourceRelationship; message and signature being stored at the consumed resources commitment  message. This message must be signed by the respective owner of the consumed resources and requires  all created ;Convertable; ;Resource; of type `R2` to be present in the ;Commitment; ;Set; of the transaction.
+  transactionWithAuthorizationExtraData
+    {R1 R2} {{Convertable R1}} {{Convertable R2}} : TransactionConvertable R1 R2 :=
+    mkTransactionHelperConvertable@{
+      toTransaction
+        (identity : Identity)
+        (consumedR1 : List R1)
+        (createdR2 : List R2)
+        : Transaction.Transaction :=
+        let
+          consumed := map Convertable.toResource consumedR1;
+          created := map Convertable.toResource createdR2;
+        in mkTransactionHelper@{
+          identity;
+          consumed;
+          created;
+          extraData :=
+            mkResourceRelationshipExtraData@{
+              nullifierKey :=
+                identity
+                  |> Identity.internal
+                  |> InternalIdentity.unInternalIdentity
+                  |> mkNullifierKey;
+              origins := consumed;
+              mustBeConsumed := [];
+              mustBeCreated := created
+            }
+        }
+    };
+
+end;

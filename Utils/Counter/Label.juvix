@@ -1,17 +1,19 @@
 module Utils.Counter.Label;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import AnomaHelpers open;
+import Anoma.Resource open;
+import Anoma.Builtin.System open;
 
-type Label := mkLabel {nf : Nullifier};
+type CounterLabel := mkCounterLabel {nf : Nullifier};
 
 instance
-Label-Eq : Eq Label :=
+CounterLabel-Eq : Eq CounterLabel :=
   mkEq@{
-    eq (l1 l2 : Label) : Bool := Label.nf l1 == Label.nf l2
+    eq (lhs rhs : CounterLabel) : Bool := CounterLabel.nf lhs == CounterLabel.nf rhs
   };
 
-get (r : Resource) : Label := anomaDecode (Resource.label r);
+-- TODO -- |> anomaEncode |> anomaDecode is WRONG. ASK PAUL HOW TO DECODE DATA REF  IF IT IS SUPPOSED TO BE OPAQUE
+get (resource : Resource) : CounterLabel :=
+  resource |> Resource.labelRef |> LabelRef.unLabelRef |> anomaEncode |> anomaDecode;
 
-getNullifierfFromLabel (r : Resource) : Nullifier := Label.nf (get r);
+getNullifierfFromLabel (resource : Resource) : Nullifier := resource |> get |> CounterLabel.nf;

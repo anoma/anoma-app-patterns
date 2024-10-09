@@ -1,26 +1,39 @@
 module Authorization.Check;
 
 import Stdlib.Prelude open;
-import Anoma open;
+
+import Anoma.Identity.External open;
+import Anoma.Identity.Signing.Types open;
+import Authorization.Message open;
+import Anoma.Resource as Resource open;
+import Anoma.Transaction open;
+import Anoma.Proving.Types open;
+
 import AnomaHelpers open;
 
-import Authorization.Message open;
-
--- TODO use nullifer instead of commitment
-isAuthorizedBy (signer : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
+-- TODO use nullifier instead of commitment
+isAuthorizedBy
+  (signer : ExternalIdentity)
+  (resource : Resource)
+  (publicInputs : ResourceLogic.Instance)
+  : Bool :=
   let
-    cm := commitment self;
+    cm := commitment resource;
   in case
-       lookupExtraData@{
+       lookupAppData@{
          -- TODO use a different lookup key
          key := cm;
          Value := Pair ResourceRelationship Signature;
-         tx
+         appData := ResourceLogic.Instance.appData publicInputs
        }
      of
        | nothing := false
        | just (msg, sig) :=
          ResourceRelationship.origin msg == cm
-           && anomaVerifyDetached sig msg signer
-           && isSubset (ResourceRelationship.mustBeConsumed msg) (nullifierSet tx)
-           && isSubset (ResourceRelationship.mustBeCreated msg) (commitmentSet tx);
+           && verify sig msg signer
+           && isSubset
+             (ResourceRelationship.mustBeConsumed msg)
+             (ResourceLogic.Instance.nullifiers publicInputs)
+           && isSubset
+             (ResourceRelationship.mustBeCreated msg)
+             (ResourceLogic.Instance.commitments publicInputs);

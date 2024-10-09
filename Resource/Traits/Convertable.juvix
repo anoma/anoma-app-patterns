@@ -1,6 +1,6 @@
 module Resource.Traits.Convertable;
 
-import Anoma open;
+import Anoma.Resource open;
 
 trait
 type Convertable ResourceT :=

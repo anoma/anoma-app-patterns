@@ -5,15 +5,16 @@ import Transaction.Traits open;
 
 import Token.Resource open;
 import Intent.Swap.Resource open;
+import Authorization.Message open;
 
 instance
 Token-Token-TransactionConvertable : TransactionConvertable Token Token :=
-  FromConvertable.transactionConvertable {Token} {Token};
+  FromConvertable.transactionWithAuthorizationExtraData {Token} {Token};
 
 instance
 Token-SwapIntent-TransactionConvertable : TransactionConvertable Token SwapIntent :=
-  FromConvertable.transactionConvertable {Token} {SwapIntent};
+  FromConvertable.transactionWithAuthorizationExtraData {Token} {SwapIntent};
 
 instance
 SwapIntent-Token-TransactionConvertable : TransactionConvertable SwapIntent Token :=
-  FromConvertable.transactionConvertable {SwapIntent} {Token};
+  FromConvertable.transactionWithAuthorizationExtraData {SwapIntent} {Token};

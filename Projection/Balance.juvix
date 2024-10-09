@@ -1,20 +1,22 @@
 module Projection.Balance;
 
 import Stdlib.Prelude open;
+import Stdlib.Debug.Fail open using {failwith};
 import Data.Set as Set open using {Set};
-import Anoma open;
 
-import KeyValueStorage.Indexing open;
+import Anoma.Resource open;
+import Anoma.Identity open;
+
+
 
 --- Returns the total quantity of a ;Resource; ;Set;.
-balance (resources : Set Resource) : Nat :=
+balance (resources : Set Resource) : Quantity :=
   for (sum := 0) (r in Set.toList resources) {sum + Resource.quantity r};
 
---- Returns a ;Set; of ;Resource;s of certain ;Kind; owned by an account ;PublicKey;
+--- TODO Adapt to testnet indexer.
+--- Returns a ;Set; of ;Resource;s of certain ;Kind; owned by an account ;ExternalIdentity;
 --- by lookup from the key-value storage.
 --- This assume that the set is is up-to-date an no ;Commitment;s of
 --- consumed ;Resource;s are present.
-fetchOwnedResources (kind : Kind) (account : PublicKey) : Set Resource :=
-  let
-    ownedResources : List Commitment := Set.toList (anomaGet (ledgerKey kind account));
-  in Set.fromList (map commitmentResource ownedResources);
+fetchOwnedResources (kind : Kind) (account : ExternalIdentity) : Set Resource :=
+  failwith "NOT IMPLEMENTED";

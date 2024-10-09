@@ -1,12 +1,22 @@
 module Authorization.Identities;
 
 import Stdlib.Prelude open;
-import Anoma open;
+-- TODO fix imports
+import Anoma.Resource open;
+import Anoma.Identity.Object open;
+import Anoma.Identity.External open;
+import Anoma.Identity.Internal open;
+import Anoma.Builtin.ByteArray open;
 
---- The ;KeyPair; generated from the seed `0x0000000000000000000000000000000000000000000000000000000000000000`
+toNullifierKeyCommitment (identity : Identity) : NullifierKeyCommitment := identity |> Identity.external |> ExternalIdentity.unExternalIdentity |> mkNullifierKeyCommitment;
+
+toNullifierKey(identity : Identity) : NullifierKey := identity |> Identity.internal |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+
+
+--- The ;Identity; generated from the seed `0x0000000000000000000000000000000000000000000000000000000000000000`
 --- (see, e.g., https://cyphr.me/ed25519_tool/ed.html) in little-endian byte order.
 module Universal;
-  keyPair : KeyPair :=
+  identity : Identity :=
     let
       pubKeyBytes :=
         [ 0x3b
@@ -42,18 +52,24 @@ module Universal;
         ; 0xda
         ; 0x29
         ];
-    in KeyPair.mk@{
-      pubKey := PublicKey.mk pubKeyBytes;
-      privKey := PrivateKey.mk (replicate 32 0x0 ++ pubKeyBytes)
+    in mkIdentity@{
+      external := mkExternalIdentity (mkByteArray pubKeyBytes);
+      internal := mkInternalIdentity (mkByteArray (replicate 32 0x0 ++ pubKeyBytes))
     };
 
-  pubKey : PublicKey := KeyPair.pubKey keyPair;
+  externalIdentity : ExternalIdentity := Identity.external identity;
 
-  privKey : PrivateKey := KeyPair.privKey keyPair;
+  internalIdentity : InternalIdentity := Identity.internal identity;
+
+  nullifierKey : NullifierKey :=
+    internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+
+  nullifierKeyCommitment : NullifierKeyCommitment :=
+    externalIdentity |> ExternalIdentity.unExternalIdentity |> mkNullifierKeyCommitment;
 end;
 
 module Alice;
-  keyPair : KeyPair :=
+  identity : Identity :=
     let
       pubKeyBytes :=
         [ 0x4c
@@ -89,18 +105,18 @@ module Alice;
         ; 0xba
         ; 0x29
         ];
-    in KeyPair.mk@{
-      pubKey := PublicKey.mk pubKeyBytes;
-      privKey := PrivateKey.mk (replicate 31 0x0 ++ [0x1] ++ pubKeyBytes)
+    in mkIdentity@{
+      external := mkExternalIdentity (mkByteArray pubKeyBytes);
+      internal := mkInternalIdentity (mkByteArray (replicate 31 0x0 ++ [0x1] ++ pubKeyBytes))
     };
 
-  pubKey : PublicKey := KeyPair.pubKey keyPair;
+  externalIdentity : ExternalIdentity := Identity.external identity;
 
-  privKey : PrivateKey := KeyPair.privKey keyPair;
+  internalIdentity : InternalIdentity := Identity.internal identity;
 end;
 
 module Bob;
-  keyPair : KeyPair :=
+  identity : Identity :=
     let
       pubKeyBytes :=
         [ 0x74
@@ -136,18 +152,18 @@ module Bob;
         ; 0x26
         ; 0x74
         ];
-    in KeyPair.mk@{
-      pubKey := PublicKey.mk pubKeyBytes;
-      privKey := PrivateKey.mk (replicate 31 0x0 ++ [0x2] ++ pubKeyBytes)
+    in mkIdentity@{
+      external := mkExternalIdentity (mkByteArray pubKeyBytes);
+      internal := mkInternalIdentity (mkByteArray (replicate 31 0x0 ++ [0x2] ++ pubKeyBytes))
     };
 
-  pubKey : PublicKey := KeyPair.pubKey keyPair;
+  externalIdentity : ExternalIdentity := Identity.external identity;
 
-  privKey : PrivateKey := KeyPair.privKey keyPair;
+  internalIdentity : InternalIdentity := Identity.internal identity;
 end;
 
 module Carol;
-  keyPair : KeyPair :=
+  identity : Identity :=
     let
       pubKeyBytes :=
         [ 0xf3
@@ -183,18 +199,28 @@ module Carol;
         ; 0xa5
         ; 0x4b
         ];
-    in KeyPair.mk@{
-      pubKey := PublicKey.mk pubKeyBytes;
-      privKey := PrivateKey.mk (replicate 31 0x0 ++ [0x3] ++ pubKeyBytes)
+    in mkIdentity@{
+      external := mkExternalIdentity (mkByteArray pubKeyBytes);
+      internal := mkInternalIdentity (mkByteArray (replicate 31 0x0 ++ [0x3] ++ pubKeyBytes))
     };
 
-  pubKey : PublicKey := KeyPair.pubKey keyPair;
+  externalIdentity : ExternalIdentity := Identity.external identity;
 
-  privKey : PrivateKey := KeyPair.privKey keyPair;
+  internalIdentity : InternalIdentity := Identity.internal identity;
 end;
 
---- The zero ;PublicKey; `0x0000000000000000000000000000000000000000000000000000000000000000`
---- for which the ;PrivateKey; is not known.
+--- The zero ;ExternalIdentity; `0x0000000000000000000000000000000000000000000000000000000000000000`
+--- for which the ;InternalIdentity; is not known.
 module Zero;
-  pubKey : PublicKey := PublicKey.mk (replicate 32 0x0);
+  externalIdentity : ExternalIdentity := mkExternalIdentity (mkByteArray (replicate 32 0x0));
+end;
+
+module ExternalIdentity;
+  toNullifierKeyCommitment (externalIdentity : ExternalIdentity) : NullifierKeyCommitment :=
+    externalIdentity |> ExternalIdentity.unExternalIdentity |> mkNullifierKeyCommitment;
+end;
+
+module InternalIdentity;
+  toNullifierKey (internalIdentity : InternalIdentity) : NullifierKey :=
+    internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
 end;

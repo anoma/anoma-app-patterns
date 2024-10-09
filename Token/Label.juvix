@@ -1,69 +1,84 @@
 module Token.Label;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Utils open;
+import Anoma.Identity.External open;
+import Anoma.Builtin.System open;
+
 import AnomaHelpers open;
 import Resource.Traits open;
 
-type Label :=
-  mkLabel {
+type TokenLabel :=
+  mkTokenLabel {
     name : String;
     symbol : String;
     decimals : Nat;
     supply : Supply;
     transferability : Transferability;
-    originator : PublicKey
+    originator : ExternalIdentity
   };
 
 instance
-Label-Eq : Eq Label :=
+TokenLabel-Eq : Eq TokenLabel :=
   let
-    toProd (l : Label) : _ :=
-      Label.name l, Label.symbol l, Label.decimals l, Label.supply l, Label.originator l;
+    toProd (l : TokenLabel) : _ :=
+      TokenLabel.name l
+        , TokenLabel.symbol l
+        , TokenLabel.decimals l
+        , TokenLabel.supply l
+        , TokenLabel.originator l;
   in mkEq@{
-    eq (l1 l2 : Label) : Bool := toProd l1 == toProd l2
+    eq (l1 l2 : TokenLabel) : Bool := toProd l1 == toProd l2
   };
 
 instance
-Label-Show : Show Label :=
+TokenLabel-Show : Show TokenLabel :=
   mkShow
     \ {l :=
       "{"
         ++str "name : "
-        ++str (l |> Label.name |> Show.show)
+        ++str (l |> TokenLabel.name |> Show.show)
         ++str ", "
         ++str "symbol : "
-        ++str (l |> Label.symbol |> Show.show)
+        ++str (l |> TokenLabel.symbol |> Show.show)
         ++str ", "
         ++str "decimals : "
-        ++str (l |> Label.decimals |> Show.show)
+        ++str (l |> TokenLabel.decimals |> Show.show)
         ++str ", "
         ++str "supply : "
-        ++str (l |> Label.supply |> Show.show)
+        ++str (l |> TokenLabel.supply |> Show.show)
         ++str ", "
         ++str "transferable : "
-        ++str (l |> Label.transferability |> Show.show)
+        ++str (l |> TokenLabel.transferability |> Show.show)
         ++str ", "
         ++str "originator : "
-        ++str (l |> Label.supply |> Show.show)
+        ++str (l |> TokenLabel.supply |> Show.show)
         ++str "}"};
 
-getLabel (r : Resource) : Label := anomaDecode (Resource.label r);
+getTokenLabel (r : Resource) : TokenLabel :=
+  r |> Resource.labelRef |> Ref.fromRef |> Label.unLabel |> anomaDecode;
 
-getName (r : Resource) : String := Label.name (getLabel r);
+getTokenName (r : Resource) : String := TokenLabel.name (getTokenLabel r);
 
-getSymbol (r : Resource) : String := Label.symbol (getLabel r);
+getTokenSymbol (r : Resource) : String := TokenLabel.symbol (getTokenLabel r);
 
-getDecimals (r : Resource) : Nat := Label.decimals (getLabel r);
+getTokenDecimals (r : Resource) : Nat := TokenLabel.decimals (getTokenLabel r);
 
 -- TODO generalize / eliminate
 isTransferable (r : Resource) : Bool :=
-  r |> getLabel |> Label.transferability |> Transferability.toBool;
+  r |> getTokenLabel |> TokenLabel.transferability |> Transferability.toBool;
+
+toLabelRef (tokenLabel : TokenLabel) : LabelRef :=
+  tokenLabel |> anomaEncode |> mkLabel |> Ref.toRef;
+
+fromLabelRef (labelRef : LabelRef) : TokenLabel :=
+  labelRef |> Ref.fromRef |> Label.unLabel |> anomaDecode;
 
 type InvalidLabelError :=
   mkInvalidLabelError {
-    expected : Label;
-    actual : Label
+    expected : TokenLabel;
+    actual : TokenLabel
   };
 
 instance

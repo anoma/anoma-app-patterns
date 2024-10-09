@@ -1,7 +1,7 @@
 module Resource.Traits.Supply;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open using {Nullifier};
 
 type Supply :=
   | Unbound

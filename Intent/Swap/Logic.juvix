@@ -1,18 +1,82 @@
 module Intent.Swap.Logic;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import AnomaHelpers open;
+import Data.Set as Set open using {Set};
+import Anoma.Identity open;
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Proving.Types open;
 
+import AnomaHelpers open;
 import Intent.Asset open;
 import Resource.Traits open;
+import Authorization.Identities open;
 
 swapIntentLogic
-  (want : QuantifiedAssets) (receiver : PublicKey) (self : Resource) (tx : Transaction) : Bool :=
+  (want : QuantifiedAssets)
+  (receiver : ExternalIdentity)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool :=
+  let
+    tag := ResourceLogic.Instance.tag publicInputs;
+  in case tag of
+       | ResourceLogic.Consumed nullifier :=
+         let
+           -- TODO HOW TO FIX THIS?
+           nullifierKey :=
+             Universal.internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findConsumedResource@{
+               nullifier;
+               nullifierKey;
+               resources
+             };
+         in case maybeSelf of {
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of {
+                  | Ephemeral := true
+                  | NonEphemeral := false
+                }
+            }
+       | ResourceLogic.Created commitment :=
+         let
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findCreatedResource@{
+               commitment;
+               resources
+             };
+         in case maybeSelf of
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of
+                  | NonEphemeral := true
+                  | Ephemeral :=
+                    case QuantifiedAssets.quantifier want of
+                      | Any :=
+                        any (asset in QuantifiedAssets.assets want)
+                          includesAsset@{
+                            asset;
+                            receiver;
+                            resources
+                          }
+                      | All :=
+                        all (asset in QuantifiedAssets.assets want)
+                          includesAsset@{
+                            asset;
+                            receiver;
+                            resources
+                          };
+
+{-swapIntentLogic
+  (want : QuantifiedAssets) (receiver : ExternalIdentity) (self : Resource) (tx : Transaction) : Bool :=
   case lifecycle self tx, HasEphemerality.get self of
     | Created, Ephemeral :=
       let
-        created := map commitmentResource (Transaction.commitments tx);
+        created := map commitment (Transaction tx);
       in case QuantifiedAssets.quantifier want of {
            | Any :=
              any (asset in QuantifiedAssets.assets want)
@@ -31,3 +95,4 @@ swapIntentLogic
          }
     | Consumed, Ephemeral := true
     | _, _ := false;
+-}

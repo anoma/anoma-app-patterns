@@ -1,7 +1,12 @@
 module Resource.Error;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Stdlib.Debug open;
+
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Identity.External open;
+
 import AnomaHelpers open;
 import Authorization.Check open;
 import Token.Resource open;
@@ -19,8 +24,8 @@ type InsufficientElementsError :=
 
 type InsufficientHasQuantityError :=
   mkInsufficientHasQuantityError {
-    limit : Nat;
-    actual : Nat
+    limit : Quantity;
+    actual : Quantity
   };
 
 type InvalidLogicError :=
@@ -37,8 +42,8 @@ type InvalidKindError :=
 
 type UnauthorizedError :=
   mkUnauthorizedError {
-    expected : PublicKey;
-    actual : PublicKey
+    expected : ExternalIdentity;
+    actual : ExternalIdentity
   };
 
 type StandardError :=
@@ -124,10 +129,10 @@ InsufficientHasQuantityError-Show : Show InsufficientHasQuantityError :=
     \ {e :=
       "InsufficientHasQuantityError:\n{"
         ++str "limit : "
-        ++str (e |> InsufficientHasQuantityError.limit |> Show.show)
+        ++str (e |> InsufficientHasQuantityError.limit |> Quantity.unQuantity |> Show.show)
         ++str ", "
         ++str "actual"
-        ++str (e |> InsufficientHasQuantityError.actual |> Show.show)
+        ++str (e |> InsufficientHasQuantityError.actual |> Quantity.unQuantity |> Show.show)
         ++str "}"};
 
 instance
@@ -165,3 +170,8 @@ UnauthorizedError-Show : Show UnauthorizedError :=
         ++str "actual"
         ++str (e |> UnauthorizedError.actual |> Show.show)
         ++str "}"};
+
+txFromResult (result : Result StandardError Transaction) : Transaction :=
+  case result of
+    | ok tx := tx
+    | error err := failwith (Show.show err);

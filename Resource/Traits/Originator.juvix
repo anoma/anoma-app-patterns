@@ -1,11 +1,11 @@
 module Resource.Traits.Originator;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Identity.External open;
 
 trait
 type HasOriginator ResourceT :=
   mkHasOriginator {
-    get : ResourceT -> PublicKey;
-    set : PublicKey -> ResourceT -> ResourceT
+    get : ResourceT -> ExternalIdentity;
+    set : ExternalIdentity -> ResourceT -> ResourceT
   };

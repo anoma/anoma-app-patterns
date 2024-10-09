@@ -1,20 +1,26 @@
 module Resource.Traits.Owner;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import Anoma.Rep open;
+import Anoma.Resource open;
+import Anoma.Identity.External open;
 
 trait
 type HasOwner ResourceT :=
   mkHasOwner {
-    get : ResourceT -> PublicKey;
-    set : PublicKey -> ResourceT -> ResourceT
+    get : ResourceT -> ExternalIdentity;
+    set : ExternalIdentity -> ResourceT -> ResourceT
   };
 
 instance
 Resource-HasOwner : HasOwner Resource :=
   mkHasOwner@{
-    get (resource : Resource) : PublicKey := resource |> Resource.npkContents |> fromAtom;
-    set (owner : PublicKey) (resource : Resource) : Resource :=
-      resource@Resource{npkContents := toAtom owner}
+    get (resource : Resource) : ExternalIdentity :=
+      resource
+        |> Resource.nullifierKeyCommitment
+        |> NullifierKeyCommitment.unNullifierKeyCommitment
+        |> mkExternalIdentity;
+    set (owner : ExternalIdentity) (resource : Resource) : Resource :=
+      resource@Resource{nullifierKeyCommitment := owner
+        |> ExternalIdentity.unExternalIdentity
+        |> mkNullifierKeyCommitment}
   };

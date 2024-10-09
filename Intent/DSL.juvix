@@ -2,7 +2,7 @@
 module Intent.DSL;
 
 import Stdlib.Prelude open hiding {for; any; all};
-import Anoma open public;
+import Anoma.Resource open;
 
 import Intent.Asset open;
 
@@ -54,8 +54,8 @@ intent (clauses : List Clause) : Resource := mkIntent clauses;
 
 axiom mkIntent : List Clause -> Resource;
 
-A : Kind := Kind.mk 1;
+A : Kind := mkKind 1;
 
-B : Kind := Kind.mk 1;
+B : Kind := mkKind 1;
 
 aliceIntentClause : QuantifiedAssets := any [5 of_ A; 3 of_ B];

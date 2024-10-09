@@ -1,10 +1,14 @@
 module Utils.Counter.Transaction;
 
 import Stdlib.Prelude open;
-import Data.Map as Map open using {Map};
-import Anoma open;
-import AnomaHelpers open;
+import Data.Set as Set open using {Set};
+import Anoma.Resource open;
+import Anoma.Identity open;
+import Anoma.Transaction open;
+import Anoma.Utils open;
+import Anoma.Builtin.System open;
 
+import AnomaHelpers open;
 import Resource.Error open;
 import Authorization.Message open;
 import Authorization.Identities open;
@@ -13,55 +17,56 @@ import Utils.Counter.Label open;
 import Utils.Counter.Resource open;
 
 --- Requires a consumable `Utils.Dummy.Resource`.
-createCounter (self : KeyPair) (consumableDummy : Resource) : Result StandardError Transaction :=
+createCounter (self : Identity) (consumableDummy : Resource) : Result StandardError Transaction :=
   let
+    nullifierKeyCommitment := toNullifierKeyCommitment self;
     ephDummy : Resource :=
       mkDummy@{
-        npk := KeyPair.pubKey self;
-        eph := true
+        nullifierKeyCommitment;
+        ephemeral := true
       };
   in if
-    | anomaKind consumableDummy /= anomaKind ephDummy :=
+    | kind consumableDummy /= kind ephDummy :=
       throw
         mkDefaultError@{
           msg := "The oked consumable resource has the wrong kind."
         }
     | else :=
       let
-        myself : PublicKey := KeyPair.pubKey self;
-        mySecret : PrivateKey := KeyPair.privKey self;
         ephCounter : Resource :=
           mkCounter@{
-            npk := myself;
-            eph := true;
-            uniqueLabel := mkLabel (nullifier consumableDummy mySecret);
+            nullifierKeyCommitment;
+            ephemeral := true;
+            uniqueLabel := mkCounterLabel (nullifier consumableDummy (toNullifierKey self));
             count := 0
           };
         newCounter :=
           mkCounter@{
-            npk := Universal.pubKey;
-            eph := false;
-            uniqueLabel := mkLabel (nullifier consumableDummy mySecret);
+            nullifierKeyCommitment := Universal.nullifierKeyCommitment;
+            ephemeral := false;
+            uniqueLabel := mkCounterLabel (nullifier consumableDummy (Universal.nullifierKey));
             count := 0
           };
-      in ok (mkTransaction mySecret [consumableDummy; ephCounter] [ephDummy; newCounter] Map.empty);
+      in ok
+        (mkTransactionHelper self [consumableDummy; ephCounter] [ephDummy; newCounter] Set.empty);
 
 incrementCounter (currentCounter : Resource) : Transaction :=
   let
     updatedCounter : Resource :=
       mkCounter@{
-        npk := Universal.pubKey;
-        eph := false;
+        nullifierKeyCommitment := Universal.nullifierKeyCommitment;
+        ephemeral := false;
         uniqueLabel := get currentCounter;
-        count := Resource.data currentCounter + 1
+        count :=
+          (currentCounter |> Resource.valueRef |> Ref.fromRef |> Value.unValue |> anomaDecode) + 1
       };
     extra :=
-      Map.fromList
+      Set.fromList
         [ mkResourceRelationshipExtraDataMapEntry@{
-          nullifierKey := Universal.privKey;
+          nullifierKey := Universal.nullifierKey;
           origin := currentCounter;
           mustBeConsumed := [];
           mustBeCreated := [updatedCounter]
         }
         ];
-  in mkTransaction Universal.privKey [currentCounter] [updatedCounter] extra;
+  in mkTransactionHelper Universal.identity [currentCounter] [updatedCounter] extra;

@@ -1,7 +1,7 @@
 module Resource.Traits.Label;
 
-import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Utils open;
 
 trait
 type HasLabel ResourceT LabelT :=
@@ -9,4 +9,3 @@ type HasLabel ResourceT LabelT :=
     get : ResourceT -> LabelT;
     set : LabelT -> ResourceT -> ResourceT
   };
-

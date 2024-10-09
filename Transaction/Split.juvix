@@ -1,7 +1,9 @@
 module Transaction.Split;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Identity open;
+import Anoma.Transaction open;
 
 import Resource.Error open;
 import Resource.Traits open;
@@ -10,7 +12,7 @@ import Transaction.Traits open;
 --- Splits a ;Convertable; typed ;Resource;.
 --- The function returns a ;StandardError; if the ;Convertable; ;Resource;
 --- - is ;Transferability.NonTransferable;
---- - is not owned by the calling ;KeyPair;
+--- - is not owned by the calling ;Identity;
 --- - or quantities do not balance.
 split
   {R}
@@ -19,16 +21,15 @@ split
   {{HasQuantity R}}
   {{HasTransferability R}}
   {{TransactionConvertable R R}}
-  (self : KeyPair)
+  (self : Identity)
   (toSplit : R)
-  (quantitiesAndReceivers : List (Pair Nat PublicKey))
+  (quantitiesAndReceivers : List (Pair Quantity ExternalIdentity))
   : Result StandardError Transaction :=
   let
-    myself : PublicKey := KeyPair.pubKey self;
-    nk : PrivateKey := KeyPair.privKey self;
-    owner : PublicKey := HasOwner.get toSplit;
+    myself : ExternalIdentity := Identity.external self;
+    owner : ExternalIdentity := HasOwner.get toSplit;
     toSplitResource := Convertable.toResource toSplit;
-    sum : Nat := listFor (acc := 0) (quantity, _ in quantitiesAndReceivers) {quantity + acc};
+    sum : Quantity := listFor (acc := 0) (quantity, _ in quantitiesAndReceivers) {quantity + acc};
 
     balance := HasQuantity.get toSplit;
     created : List R :=
@@ -52,4 +53,4 @@ split
                      limit := balance;
                      actual := sum
                    }
-               | true := ok (TransactionConvertable.toTransaction nk [toSplit] created);
+               | true := ok (TransactionConvertable.toTransaction self [toSplit] created);

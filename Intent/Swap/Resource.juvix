@@ -1,7 +1,9 @@
 module Intent.Swap.Resource;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Identity open;
+import Anoma.Utils open;
 import AnomaHelpers open;
 
 import Resource.Traits open;
@@ -11,17 +13,18 @@ import Intent.Swap.Logic open;
 module SwapIntent;
   type SwapIntent := mk {resource : Resource};
 
-  create (want : QuantifiedAssets) (receiver solver : PublicKey) : SwapIntent :=
+  create (want : QuantifiedAssets) (receiver solver : ExternalIdentity) : SwapIntent :=
     mk
-      Resource.mk@{
-        logic := swapIntentLogic want receiver;
-        label := anomaEncode "SwapIntent";
+      mkResource@{
+        logicRef := Ref.toRef (swapIntentLogic want receiver);
+        labelRef := Ref.toRef (mkLabel 0);
+        valueRef := Ref.toRef (mkValue 0);
         quantity := 1;
-        data := 0;
-        eph := true;
-        npk := solver;
-        nonce := rand;
-        rseed := 0
+        ephemeral := true;
+        nullifierKeyCommitment :=
+          solver |> ExternalIdentity.unExternalIdentity |> mkNullifierKeyCommitment;
+        nonce := mkNonce rand;
+        randSeed := mkRandSeed rand
       };
 
   open SwapIntent public;

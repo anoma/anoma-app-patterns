@@ -1,7 +1,7 @@
 module Resource.Traits.Ephemerality;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
 
 module Ephemerality;
   type Ephemerality :=
@@ -39,7 +39,8 @@ type HasEphemerality ResourceT :=
 instance
 Resource-HasEphemerality : HasEphemerality Resource :=
   mkHasEphemerality@{
-    get (resource : Resource) : Ephemerality := resource |> Resource.eph |> Ephemerality.fromBool;
+    get (resource : Resource) : Ephemerality :=
+      resource |> Resource.ephemeral |> Ephemerality.fromBool;
     set (ephemerality : Ephemerality) (resource : Resource) : Resource :=
-      resource@Resource{eph := Ephemerality.toBool ephemerality}
+      resource@Resource{ephemeral := Ephemerality.toBool ephemerality}
   };

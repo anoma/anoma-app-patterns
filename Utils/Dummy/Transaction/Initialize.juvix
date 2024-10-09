@@ -1,23 +1,27 @@
 module Utils.Dummy.Transaction.Initialize;
 
 import Stdlib.Prelude open;
-import Data.Map as Map open using {Map};
-import Anoma open;
-import Anoma.Rep open;
+import Data.Set as Set open using {Set};
+
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Identity open;
 import AnomaHelpers open;
 
 import Utils.Dummy.Resource open;
 
-initialize (self : KeyPair) : Transaction :=
-  let
-    dummy : Resource :=
-      mkDummy@{
-        npk := KeyPair.pubKey self;
-        eph := false
-      };
-  in mkTransaction@{
-    nullifierKey := KeyPair.privKey self;
-    consumed := [dummy@Resource{   eph := true; npkContents := toAtom (KeyPair.pubKey self) }];
+initialize (self : Identity) (dummy : Resource) : Transaction :=
+  mkTransactionHelper@{
+    identity := self;
+    consumed :=
+      [ dummy@Resource{
+        ephemeral := true;
+        nullifierKeyCommitment := self
+          |> Identity.external
+          |> ExternalIdentity.unExternalIdentity
+          |> mkNullifierKeyCommitment
+      }
+      ];
     created := [dummy];
-    extraData := Map.empty
+    extraData := Set.empty
   };

@@ -1,14 +1,20 @@
 module AnomaHelpers;
 
 import Stdlib.Prelude open;
+import Stdlib.Debug.Fail open using {failwith};
 import Stdlib.Trait.Ord.Eq open using {fromOrdToEq};
 
-import Anoma open;
-import Anoma.Rep open;
-
+import Authorization.Identities open;
 import Data.Set as Set open using {Set};
 import Data.Map as Map open using {Map};
+import Anoma.Identity open;
+import Anoma.Resource as Resource open;
+import Anoma.Transaction as Transaction open;
+--import Anoma.Transaction.Object as Transaction open using {commitmentSet; nullifierSet};
+import Anoma.Builtin.System open;
+import Anoma.Proving.Types open;
 
+{-
 -- TODO Replace by ByteArray / List Byte and delete
 type Bytes32 := mkBytes32 {unBytes32 : Nat};
 
@@ -37,25 +43,44 @@ Bytes-Ord : Ord Bytes :=
   };
 
 natToBytes : Nat -> Bytes := mkBytes;
+-}
 
+-- TODO Refactor
 instance
-PublicKey-Show : Show PublicKey := mkShow \ {k := natToString (toAtom k)};
+ExternalIdentity-Show : Show ExternalIdentity :=
+  failwith "`ExternalIdentity-Show : Show ExternalIdentity` NOT IMPLEMENTED";
+--mkShow \ {e := natToString (ExternalIdentity.unExternalIdentity e)};
 
+-- TODO Refactor
 instance
-PrivateKey-Show : Show PrivateKey := mkShow \ {k := natToString (toAtom k)};
+InternalIdentity-Show : Show InternalIdentity :=
+  failwith "`InternalIdentity-Show : Show InternalIdentity` NOT IMPLEMENTED";
+--mkShow \ {e := natToString (InternalIdentity.unInternalIdentity e)};
 
-isCreated (r : Resource) (tx : Transaction) : Bool :=
-  elem (==) r (ResourcePartition.created (partitionResources tx));
+findCreatedResource (commitment : Commitment) (resources : Set Resource) : Maybe Resource :=
+  find \ {r := Resource.commitment r == commitment} (Set.toList resources);
 
-isConsumed (r : Resource) (tx : Transaction) : Bool :=
-  elem (==) r (ResourcePartition.consumed (partitionResources tx));
+-- TODO where to get the nullifierKey from. Probably customInputs
+findConsumedResource
+  (nullifier : Nullifier)
+  (nullifierKey : NullifierKey)
+  (resources : Set Resource)
+  : Maybe Resource :=
+  find \ {r := Resource.nullifier r nullifierKey == nullifier} (Set.toList resources);
 
-type Lifecycle :=
-  | Consumed
-  | Created
-  | Unknown;
+-- TODO Refactor
+isCreated (commitment : Commitment) (publicInputs : ResourceLogic.Instance) : Bool :=
+  Set.member? commitment (ResourceLogic.Instance.commitments publicInputs);
 
-lifecycle (r : Resource) (tx : Transaction) : Lifecycle :=
+-- TODO Refactor
+isConsumed (nullifier : Nullifier) (publicInputs : ResourceLogic.Instance) : Bool :=
+  Set.member? nullifier (ResourceLogic.Instance.nullifiers publicInputs);
+
+-- TODO Refactor.
+--lifecycle (r : Resource) (tx : Transaction) : Lifecycle :=
+--  failwith "`lifecycle (r : Resource) (tx : Transaction) : Lifecycle ` NOT IMPLEMENTED";
+
+{-
   let
     rs := partitionResources tx;
     consumed := ResourcePartition.consumed rs;
@@ -64,21 +89,52 @@ lifecycle (r : Resource) (tx : Transaction) : Lifecycle :=
     | elem (==) r consumed := Consumed
     | elem (==) r created := Created
     | else := Unknown;
+-}
 
-isNullifierPresent (nf : Nullifier) (tx : Transaction) : Bool :=
-  elem (==) nf (Transaction.nullifiers tx);
+-- TODO refactor error handling.
+-- TODO within action or
+isNullifierPresent
+  (nullifier : Resource.Nullifier) (nullifierSet : Set Resource.Nullifier) : Bool :=
+  Set.member? nullifier nullifierSet;
 
 isSubset {A} {{Ord A}} (sub sup : Set A) : Bool := all (x in Set.toList sub) Set.member? x sup;
 
 isSublist {A} {{Ord A}} (sub sup : List A) : Bool :=
-  let sup' := Set.fromList sup
+  let
+    sup' := Set.fromList sup;
   in all (x in sub)
        Set.member? x sup';
 
-commitmentSet (tx : Transaction) : Set Commitment := Set.fromList (Transaction.commitments tx);
+module AppDataMap;
+  fromSet (appDataSet : Set AppDataEntry) : Map AppDataKey AppDataValue :=
+    Map.fromList
+      (map (entry in Set.toList appDataSet) {AppDataEntry.key entry, AppDataEntry.value entry});
 
-nullifierSet (tx : Transaction) : Set Nullifier := Set.fromList (Transaction.nullifiers tx);
+  toSet (appDataMap : Map AppDataKey AppDataValue) : Set AppDataEntry :=
+    Set.fromList
+      (map (key, value in Map.toList appDataMap)
+        {mkAppDataEntry@{
+          key;
+          value
+        }});
+end;
 
+lookupAppData {Key Value : Type} (key : Key) (appData : AppData) : Maybe Value :=
+  let
+    appDataAsMap : Map AppDataKey AppDataValue := AppDataMap.fromSet appData;
+  in map
+    (AppDataValue.unAppDataValue >> anomaDecode)
+    (Map.lookup (anomaEncode key |> mkAppDataKey) appDataAsMap);
+
+-- TODO refactor
+lookupCustomInputs
+  {Key Value : Type} (key : Key) (customInputs : ResourceLogic.CustomInputs) : Maybe Value :=
+  lookupAppData@{
+    key;
+    appData := customInputs
+  };
+
+{-
 lookupExtraData {Key Value : Type} (key : Key) (tx : Transaction) : Maybe Value :=
   let
     keyValueMap : Map Bytes32 Bytes := anomaDecode (Transaction.extra tx);
@@ -87,49 +143,46 @@ lookupExtraData {Key Value : Type} (key : Key) (tx : Transaction) : Maybe Value 
 mkExtraDataEntry {Key Value : Type} : Pair Key Value -> Pair Bytes32 Bytes
   | (key, value) := natToBytes32 (anomaEncode key), natToBytes (anomaEncode value);
 
-mkTransaction
-  (nullifierKey : PrivateKey)
+computeDelta (consumed : List Resource) (created : List Resource) : Delta :=
+  let
+    withCreatedDelta : DeltaMap := for (acc := emptyDeltaMap) (r in created) addDelta acc r;
+    withConsumedDelta : DeltaMap := for (acc := withCreatedDelta) (r in consumed) subDelta acc r;
+  in toDelta withConsumedDelta;
+-}
+
+--- TODO Refactor to use actions
+mkTransactionHelper
+  (identity : Identity)
   (consumed : List Resource)
   (created : List Resource)
-  (extraData : Map Bytes32 Bytes)
-  : Transaction :=
+  (extraData : AppData)
+  --Map Bytes32 Bytes)
+  : Transaction := failwith "`mkTransactionHelper` NOT IMPLEMENTED";
+
+{-
   Transaction.mk@{
     roots := [];
     commitments := map commitment created;
     nullifiers := map (r in consumed) nullifier r nullifierKey;
     proofs := consumed ++ created;
-    delta := [];
+    delta :=
+      computeDelta@{
+        consumed;
+        created
+      };
     extra := anomaEncode (extraData);
     preference := 0
   };
-
+  -}
 emptyTx : Transaction :=
-  Transaction.mk@{
-    roots := [];
-    commitments := [];
-    nullifiers := [];
-    proofs := [];
-    delta := [];
-    extra := anomaEncode (Map.empty {Bytes32} {Bytes});
-    preference := 0
-  };
-
-compose (tx1 tx2 : Transaction) : Transaction :=
-  Transaction.mk@{
-    roots := Transaction.roots tx1 ++ Transaction.roots tx2;
-    commitments := Transaction.commitments tx1 ++ Transaction.commitments tx2;
-    nullifiers := Transaction.nullifiers tx1 ++ Transaction.nullifiers tx2;
-    proofs := Transaction.proofs tx1 ++ Transaction.proofs tx2;
-    delta := Transaction.delta tx1 ++ Transaction.delta tx2;
-    extra :=
-      let
-        kvList1 : List (Pair Bytes32 Bytes) := Map.toList (anomaDecode (Transaction.extra tx1));
-        kvList2 : List (Pair Bytes32 Bytes) := Map.toList (anomaDecode (Transaction.extra tx2));
-      in anomaEncode (Map.fromList (kvList1 ++ kvList2));
-    preference := 0
+  mkTransactionHelper@{
+    identity := Universal.identity;
+    consumed := [];
+    created := [];
+    extraData := Set.empty
   };
 
 composeAll (txs : List Transaction) : Transaction :=
-  for (acc := emptyTx) (tx in txs) {compose acc tx};
+  for (acc := emptyTx) (tx in txs) {composeTransactions acc tx};
 
 rand : Nat := 0;

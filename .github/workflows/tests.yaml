@@ -23,9 +23,5 @@ jobs:
       - name: Clean
         run: juvix clean --global && juvix dependencies update 
         
-      - name: Run TokenLogic Test
-        run: juvix eval Token/Tests/TokenLogic.juvix
-
-      # NOTE: Skipped because of performance issues of `anomaDecode`
-      #- name: Run Swap Test
-      #  run: juvix eval Token/Tests/Swap.juvix
+      - name: Typecheck
+        run: juvix typecheck

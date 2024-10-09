@@ -1,11 +1,8 @@
 module Resource.Traits.Transferability;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import Anoma.Rep open;
 
 module Transferability;
-
   type Transferability :=
     | NonTransferable
     | Transferable;

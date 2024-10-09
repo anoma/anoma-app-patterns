@@ -1,9 +1,11 @@
 module Transaction.Initialize;
 
 import Stdlib.Prelude open;
-import Anoma open;
-import AnomaHelpers open;
+import Anoma.Resource open;
+import Anoma.Transaction open;
+import Anoma.Identity open;
 
+import AnomaHelpers open;
 import Resource.Error open;
 import Resource.Traits open;
 import Transaction.Traits open;
@@ -22,15 +24,19 @@ initialize
   {{HasSupply R}}
   {{HasEphemerality R}}
   {{TransactionConvertable R R}}
-  (self : KeyPair)
+  (self : Identity)
   (toInitialize : R)
   (maybeDummy : Maybe Resource)
   : Result StandardError Transaction :=
   let
-    myself : PublicKey := KeyPair.pubKey self;
-    nk : PrivateKey := KeyPair.privKey self;
-    ephResource : R := HasEphemerality.set Ephemerality.Ephemeral (HasOwner.set myself toInitialize);
-    tx : Transaction := TransactionConvertable.toTransaction nk [ephResource] [toInitialize];
+    -- TODO Refactor
+    nk : NullifierKey :=
+      self |> Identity.internal |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+    ephResource : R :=
+      HasEphemerality.set
+        Ephemerality.Ephemeral
+        (HasOwner.set (Identity.external self) toInitialize);
+    tx : Transaction := TransactionConvertable.toTransaction self [ephResource] [toInitialize];
   in case HasSupply.get toInitialize of
        | Unbound :=
          case maybeDummy of {
@@ -64,7 +70,7 @@ initialize
                    }
                | true :=
                  ok
-                   compose@{
+                   composeTransactions@{
                      tx1 := tx;
                      tx2 :=
                        Dummy.finalize@{

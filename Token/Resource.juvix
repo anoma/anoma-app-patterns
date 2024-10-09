@@ -1,31 +1,40 @@
 module Token.Resource;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Resource open;
+import Anoma.Identity.External open;
+
 import AnomaHelpers open;
 
 import Resource.Traits open;
 import Token.Label open;
 import Token.Logic open;
+import Anoma.Builtin.System open;
+import Anoma.Utils open;
 
 module Token;
   type Token := mk {resource : Resource};
 
-  create (quantity : Nat) (tokenLabel : Label) (npk : PublicKey) {eph : Bool := false} : Token :=
+  create
+    (quantity : Quantity)
+    (tokenLabel : TokenLabel)
+    (nullifierKeyCommitment : NullifierKeyCommitment)
+    {ephemeral : Bool := false}
+    : Token :=
     mk
-      Resource.mk@{
-        logic := tokenLogic (Label.supply tokenLabel) (Label.originator tokenLabel);
-        label := anomaEncode (tokenLabel);
+      mkResource@{
+        logicRef :=
+          Ref.toRef (tokenLogic (TokenLabel.supply tokenLabel) (TokenLabel.originator tokenLabel));
+        labelRef := toLabelRef tokenLabel;
+        valueRef := Ref.toRef (mkValue 0);
         quantity;
-        data := 0;
-        eph;
-        npk;
-        nonce := rand;
-        rseed := rand
+        ephemeral;
+        nullifierKeyCommitment;
+        nonce := mkNonce rand;
+        randSeed := mkRandSeed rand
       };
 
   open Token public;
-
 end;
 
 open Token using {Token} public;
@@ -33,18 +42,24 @@ open Token using {Token} public;
 instance
 Token-Convertable : Convertable Token :=
   mkConvertable@{
-    toResource (t : Token) : Resource := Token.resource t;
-    fromResource (r : Resource) : Token := Token.mk r
+    toResource (token : Token) : Resource := Token.resource token;
+    fromResource (resource : Resource) : Token :=
+      Token.mk@{
+        resource
+      }
   };
 
-kindFromTokenLabel (tokenLabel : Label) : Kind :=
-  Kind.fromLabelAndLogic@{
-    logic := tokenLogic (Label.supply tokenLabel) (Label.originator tokenLabel);
-    label := anomaEncode tokenLabel
+-- TODO Refactor
+kindFromTokenLabel (tokenLabel : TokenLabel) : Kind :=
+  KindInternal.kind@{
+    logicRef :=
+      Ref.toRef (tokenLogic (TokenLabel.supply tokenLabel) (TokenLabel.originator tokenLabel));
+    labelRef := toLabelRef tokenLabel
   };
 
 instance
 Token-HasQuantity : HasQuantity Token := FromConvertable.hasQuantity {Token};
+
 
 instance
 Token-HasOwner : HasOwner Token := FromConvertable.hasOwner {Token};
@@ -59,42 +74,41 @@ instance
 Token-HasKind : HasKind Token := FromConvertable.hasKind {Token};
 
 instance
-Token-Label-HasLabel : HasLabel Token Label :=
+Token-Label-HasLabel : HasLabel Token TokenLabel :=
   mkHasLabel@{
-    get (token : Token) : Label := token |> Convertable.toResource |> Resource.label |> anomaDecode;
-    set (label : Label) (token : Token) : Token :=
-      let
-        resource := Convertable.toResource token;
-      in resource@Resource{label := anomaEncode label} |> Convertable.fromResource
+    get (token : Token) : TokenLabel :=
+      token |> Convertable.toResource |> Resource.labelRef |> fromLabelRef;
+    set (tokenLabel : TokenLabel) (token : Token) : Token :=
+      (token |> Convertable.toResource)@Resource{labelRef := toLabelRef tokenLabel}
+        |> Convertable.fromResource
   };
 
 instance
 Token-HasSupply : HasSupply Token :=
   mkHasSupply@{
-    get (token : Token) : Supply := token |> HasLabel.get {Token} {Label} |> Label.supply;
+    get (token : Token) : Supply := token |> HasLabel.get |> TokenLabel.supply;
     set (supply : Supply) (token : Token) : Token :=
       let
-        newLabel := (HasLabel.get {Token} {Label} token)@Label{supply := supply};
-      in HasLabel.set {Token} {Label} newLabel token
+        newLabel := (HasLabel.get token)@TokenLabel{supply := supply};
+      in HasLabel.set newLabel token
   };
 
 instance
 Token-HasTransferability : HasTransferability Token :=
   mkHasTransferability@{
-    get (token : Token) : Transferability :=
-      token |> HasLabel.get {Token} {Label} |> Label.transferability;
+    get (token : Token) : Transferability := token |> HasLabel.get |> TokenLabel.transferability;
     set (transferability : Transferability) (token : Token) : Token :=
       let
-        newLabel := (HasLabel.get {Token} {Label} token)@Label{transferability := transferability};
-      in HasLabel.set {Token} {Label} newLabel token
+        newLabel := (HasLabel.get token)@TokenLabel{transferability := transferability};
+      in HasLabel.set newLabel token
   };
 
 instance
 Token-HasOriginator : HasOriginator Token :=
   mkHasOriginator@{
-    get (token : Token) : PublicKey := token |> HasLabel.get {Token} {Label} |> Label.originator;
-    set (originator : PublicKey) (token : Token) : Token :=
+    get (token : Token) : ExternalIdentity := token |> HasLabel.get |> TokenLabel.originator;
+    set (originator : ExternalIdentity) (token : Token) : Token :=
       let
-        newLabel := (HasLabel.get {Token} {Label} token)@Label{originator := originator};
-      in HasLabel.set {Token} {Label} newLabel token
+        newLabel := (HasLabel.get token)@TokenLabel{originator := originator};
+      in HasLabel.set newLabel token
   };

@@ -1,7 +1,9 @@
 module Transaction.Swap;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Identity open;
+import Anoma.Resource open;
+import Anoma.Transaction open;
 import AnomaHelpers open;
 
 import Resource.Error open;
@@ -12,14 +14,14 @@ import Intent.Swap.Solution open;
 --- Swaps a list of ;Convertable; typed ;Resource;s via an intent of type `I`.
 --- The function returns a ;StandardError; if the ;Convertable; typed ;Resource;s are
 --- - non-transferable
---- - not owned by the calling ;KeyPair;.
+--- - not owned by the calling ;Identity;.
 swap
   {R I}
   {{Convertable R}}
   {{HasOwner R}}
   {{HasTransferability R}}
   {{TransactionConvertable R I}}
-  (self : KeyPair)
+  (self : Identity)
   (toSwap : List R)
   (intent : I)
   : Result StandardError Transaction :=
@@ -34,27 +36,26 @@ swap
       case find ((/=) (Transferability.Transferable)) (map HasTransferability.get toSwap) of
         | just _ := throw mkNonTransferableError
         | nothing :=
-          case find ((/=) (KeyPair.pubKey self)) (map HasOwner.get toSwap) of
+          case find ((/=) (Identity.external self)) (map HasOwner.get toSwap) of
             | just notMyself :=
               throw
                 mkUnauthorizedError@{
-                  expected := KeyPair.pubKey self;
+                  expected := Identity.external self;
                   actual := notMyself
                 }
-            | nothing :=
-              ok (TransactionConvertable.toTransaction (KeyPair.privKey self) toSwap [intent]);
+            | nothing := ok (TransactionConvertable.toTransaction self toSwap [intent]);
 
 --- Settles a ;List; of swap ;Transaction;s by composing them with
 --- ;Transaction;s obtained from a ;List; of ;Solution;s.
 --- The function returns a ;StandardError; if
---- - the calling ;KeyPair; is not designated intent solver.
+--- - the calling ;Identity; is not designated intent solver.
 settle
-  (self : KeyPair)
+  (self : Identity)
   (txs : List Transaction)
   (solutions : List Solution)
   : Result StandardError Transaction :=
   let
-    myself := KeyPair.pubKey self;
+    myself := Identity.external self;
     solutionTxs := map (Solution.toTransaction self) (solutions);
   in case find ((/=) myself) (map \ {s := HasOwner.get (Solution.intent s)} solutions) of
        | just notMyself :=

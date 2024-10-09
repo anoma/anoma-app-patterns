@@ -1,7 +1,9 @@
 module Utils.Counter.Logic;
 
 import Stdlib.Prelude open;
-import Anoma open;
+import Anoma.Identity open;
+import Anoma.Resource open;
+import Anoma.Proving.Types open;
 import AnomaHelpers open;
 
 import Utils.Counter.Count open;
@@ -9,19 +11,68 @@ import Utils.Counter.Label open;
 import Utils.Counter.Extra open;
 
 import Resource.Traits open;
+import Authorization.Identities open;
 
-counterLogic (self : Resource) (tx : Transaction) : Bool :=
-  case lifecycle self tx, HasEphemerality.get self of
-    | Consumed, Ephemeral := initializationLogic self tx
-    | Consumed, NonEphemeral := incrementationLogic self tx
-    | Created, Ephemeral := false
-    | Created, NonEphemeral := true
-    | Unknown, _ := false;
+counterLogic
+  (publicInputs : ResourceLogic.Instance) (privateInputs : ResourceLogic.Witness) : Bool :=
+  let
+    tag := ResourceLogic.Instance.tag publicInputs;
+  in case tag of
+       | ResourceLogic.Consumed nullifier :=
+         let
+           -- TODO HOW TO FIX THIS?
+           nullifierKey :=
+             Universal.internalIdentity |> InternalIdentity.unInternalIdentity |> mkNullifierKey;
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findConsumedResource@{
+               nullifier;
+               nullifierKey;
+               resources
+             };
+         in case maybeSelf of {
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of {
+                  | Ephemeral := initializationLogic nullifier self publicInputs
+                  | NonEphemeral := incrementationLogic self publicInputs privateInputs
+                }
+            }
+       | ResourceLogic.Created commitment :=
+         let
+           resources := ResourceLogic.Witness.created privateInputs;
+           maybeSelf :=
+             findCreatedResource@{
+               commitment;
+               resources
+             };
+         in case maybeSelf of
+              | nothing := false
+              | just self :=
+                case HasEphemerality.get self of
+                  | Ephemeral := false
+                  | NonEphemeral := true;
 
-initializationLogic (self : Resource) (tx : Transaction) : Bool :=
-  HasQuantity.get self == 1 && isNullifierPresent (getNullifierfFromLabel self) tx;
+initializationLogic
+  (nullifier : Nullifier) (self : Resource) (publicInputs : ResourceLogic.Instance) : Bool :=
+  HasQuantity.get self == 1
+    && isNullifierPresent@{
+      nullifier;
+      nullifierSet := ResourceLogic.Instance.nullifiers publicInputs
+    };
 
-incrementationLogic (self : Resource) (tx : Transaction) : Bool :=
-  case findCreatedCounter self tx of
-    | just found := isIncremented self found
+-- TODO use pattern matching
+incrementationLogic
+  (self : Resource)
+  (publicInputs : ResourceLogic.Instance)
+  (privateInputs : ResourceLogic.Witness)
+  : Bool :=
+  case
+    findCreatedCounter@{
+      consumedCounter := self;
+      publicInputs;
+      privateInputs
+    }
+  of
+    | just foundCounter := isIncremented self foundCounter
     | nothing := false;
